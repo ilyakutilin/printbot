@@ -1,0 +1,107 @@
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+from bot.exceptions import IncorrectUserIDError, MissingEnvVarError
+
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = None
+if Path.exists(BASE_DIR.parent / ".env"):
+    ENV_FILE = BASE_DIR.parent / ".env"
+else:
+    if Path.exists(BASE_DIR / ".env"):
+        ENV_FILE = BASE_DIR / ".env"
+
+load_dotenv(ENV_FILE)
+
+
+class Settings:
+    def __init__(self) -> None:
+        self.tg_token: str = self._validate_required_str("TELEGRAM_TOKEN")
+        self.printer_name: str | None = os.getenv("PRINTER_NAME")
+        self.allowed_users: tuple[str, ...] | None = self._validate_tg_users(
+            "ALLOWED_USERS"
+        )
+
+    def _validate_required_str(self, env_var: str) -> str:
+        """Validates an env var that is required (i.e. there is no default value).
+
+        Args:
+            env_var (str): A required environmant variable.
+
+        Raises:
+            MissingEnvVarError: Raised if a required env var is missing.
+
+        Returns:
+            str: A value of the env var.
+        """
+        val = os.getenv(env_var)
+        if not val:
+            raise MissingEnvVarError(env_var)
+        return val
+
+    def _parse_comma_separated(self, env_var: str) -> tuple[str, ...] | None:
+        """Splits a comma separated string into a tuple of strings.
+
+        Splits the input string by commas, removes leading and trailing spaces from each
+        element, and removes all empty elements. If the input string is empty, None,
+        or contains only spaces/commas, returns None.
+
+        Args:
+            env_var (str): An environment variable that stores the comma separated
+                values.
+
+        Returns:
+            parsed (tuple[str, ...] | None): a tuple of non-empty clean strings or None
+                if the input data are None or empty after processing.
+
+        Examples:
+            >>> parse_comma_separated_strings("a,b,c")
+            ('a', 'b', 'c')
+            >>> parse_comma_separated_strings(" apple , banana ,  pear ")
+            ('apple', 'banana', 'pear')
+            >>> parse_comma_separated_strings("")
+            None
+            >>> parse_comma_separated_strings(None)
+            None
+            >>> parse_comma_separated_strings(" , , ")
+            None
+        """
+        val = os.getenv(env_var)
+        if not val:
+            return None
+        parsed = tuple([st.strip() for st in val.split(",") if st.strip()])
+        if not parsed:
+            return None
+        return parsed
+
+    def _validate_tg_users(self, env_var: str) -> tuple[str, ...] | None:
+        """Validates Telegram User IDs.
+
+        Args:
+            env_var (str): An environment variable that stores the comma separated
+                values of user ids.
+
+        Raises:
+            IncorrectUserIDError: Raised if the user ID is not an integer.
+
+        Returns:
+            tuple[str, ...] | None: A tuple of User IDs or None.
+        """
+        user_ids: tuple[str, ...] | None = self._parse_comma_separated(env_var)
+
+        if not user_ids:
+            return user_ids
+
+        wrong_ids: list[str] = []
+        for user_id in user_ids:
+            try:
+                int(user_id)
+            except ValueError:
+                wrong_ids.append(user_id)
+
+        if wrong_ids:
+            raise IncorrectUserIDError(wrong_ids)
+
+        return user_ids
