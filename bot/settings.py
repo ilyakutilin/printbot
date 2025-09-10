@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -14,6 +15,27 @@ else:
         ENV_FILE = BASE_DIR / ".env"
 
 load_dotenv(ENV_FILE)
+
+
+class LogSettings:
+    def __init__(self) -> None:
+        self.log_format: str = os.getenv(
+            "LOG_FORMAT",
+            "%(asctime)s — %(name)s — %(levelname)s — %(funcName)s:%(lineno)d — %(message)s",
+        )
+        self.log_dt_fmt: str = os.getenv("LOG_DT_FMT", "%d.%m.%Y %H:%M:%S")
+        self.log_level: int = self._validate_log_level("LOG_LEVEL")
+
+    def _validate_log_level(self, env_var: str) -> int:
+        val = os.getenv(env_var)
+
+        if not val:
+            return logging.INFO
+
+        try:
+            return logging.getLevelNamesMapping()[val.strip().upper()]
+        except KeyError:
+            return logging.INFO
 
 
 class Settings:
