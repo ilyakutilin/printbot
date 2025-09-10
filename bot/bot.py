@@ -1,7 +1,7 @@
 import os
 from collections import abc
 
-from telegram import Update
+from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -18,6 +18,10 @@ from bot.exceptions import (
 from bot.helpers import get_printing_queue, prepare_for_printing, print_file
 from bot.messages import MESSAGES as msgs
 from bot.settings import Settings
+
+main_keyboard = ReplyKeyboardMarkup(
+    [["/start", "/status"]], resize_keyboard=True, one_time_keyboard=False
+)
 
 
 async def _is_user_valid(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -57,9 +61,13 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             printable_path = prepare_for_printing(file_path)
         except UnprintableTypeError:
-            await update.message.reply_text(msgs["unprintable"])
+            await update.message.reply_text(
+                msgs["unprintable"], reply_markup=main_keyboard
+            )
         except FileNotFoundError as e:
-            await update.message.reply_text(msgs["failed"].format(err=e))
+            await update.message.reply_text(
+                msgs["failed"].format(err=e), reply_markup=main_keyboard
+            )
 
     elif update.message.photo:
         photo = update.message.photo[-1]  # highest resolution
@@ -69,16 +77,20 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await file.download_to_drive(file_path)
 
     else:
-        await update.message.reply_text(msgs["unsupported"])
+        await update.message.reply_text(msgs["unsupported"], reply_markup=main_keyboard)
         return
 
     printer_name = context.bot_data.get("printer_name")
     try:
         print_file(printable_path, printer_name)
     except PrintingError:
-        await update.message.reply_text(msgs["printing_failed"])
+        await update.message.reply_text(
+            msgs["printing_failed"], reply_markup=main_keyboard
+        )
     else:
-        await update.message.reply_text(msgs["sent_to_printer"])
+        await update.message.reply_text(
+            msgs["sent_to_printer"], reply_markup=main_keyboard
+        )
     finally:
         try:
             if file_path and os.path.exists(file_path):
@@ -102,11 +114,17 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         queue = get_printing_queue()
         if queue:
-            await update.message.reply_text(msgs["print_queue"].format(queue=queue))
+            await update.message.reply_text(
+                msgs["print_queue"].format(queue=queue), reply_markup=main_keyboard
+            )
         else:
-            await update.message.reply_text(msgs["empty_queue"])
+            await update.message.reply_text(
+                msgs["empty_queue"], reply_markup=main_keyboard
+            )
     except PrinterStatusRetrievalError:
-        await update.message.reply_text(msgs["status_failed"])
+        await update.message.reply_text(
+            msgs["status_failed"], reply_markup=main_keyboard
+        )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -115,7 +133,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     assert update.message is not None
-    await update.message.reply_text(msgs["start"])
+    await update.message.reply_text(msgs["start"], reply_markup=main_keyboard)
 
 
 def build_app(settings: Settings) -> Application:
