@@ -1,3 +1,4 @@
+from bot.bot import build_app
 from bot.exceptions import SettingsError
 from bot.settings import Settings
 
@@ -11,7 +12,9 @@ def main():
         print(f"Project settings validation error: {e} {exit_text}")
         raise SystemExit(1)
 
-    print(f"{s.tg_token=}, {s.printer_name=}, {s.allowed_users=}")
+    app = build_app(s)
+
+    app.run_polling()
 
 
 if __name__ == "__main__":
