@@ -4,7 +4,12 @@ import subprocess
 
 import filetype
 
-from bot.exceptions import CommandError, FileConversionError, UnprintableTypeError
+from bot.exceptions import (
+    CommandError,
+    FileConversionError,
+    PrintingError,
+    UnprintableTypeError,
+)
 
 
 def run_cmd(command: list[str]) -> subprocess.CompletedProcess:
@@ -105,8 +110,26 @@ def prepare_for_printing(file_path: str) -> str:
 
 
 def print_file(file_path: str, printer_name: str | None) -> None:
-    """Send file to printer using lp."""
-    pass
+    """Send file to printer using lp.
+
+    Args:
+        file_path (str): Path to a file to be printed.
+        printer_name (str | None): Printer name that the file will be sent to. Optional.
+
+    Raises:
+        PrintingError: Raised in case the command exits with a code other than 0.
+    """
+    if printer_name:
+        cmd = ["lp", "-d", printer_name, file_path]
+    else:
+        cmd = ["lp", file_path]
+
+    try:
+        run_cmd(cmd)
+    except CommandError as e:
+        raise PrintingError(
+            f"Failure while running the conversion command {' '.join(cmd)}: {e}"
+        )
 
 
 def is_allowed(user_id: int, allowed_users: tuple[int] | None) -> bool:

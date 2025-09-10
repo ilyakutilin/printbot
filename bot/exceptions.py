@@ -30,3 +30,7 @@ class FileConversionError(DocumentError):
 
 class UnprintableTypeError(DocumentError):
     """Raised if a document of this type cannot be printed."""
+
+
+class PrintingError(DocumentError):
+    """Raised in case printing fails."""

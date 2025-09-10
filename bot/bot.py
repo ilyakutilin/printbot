@@ -9,7 +9,7 @@ from telegram.ext import (
     filters,
 )
 
-from bot.exceptions import UnprintableTypeError
+from bot.exceptions import PrintingError, UnprintableTypeError
 from bot.helpers import is_allowed, prepare_for_printing, print_file
 from bot.messages import MESSAGES as msgs
 from bot.settings import Settings
@@ -56,20 +56,24 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     printer_name = context.bot_data.get("printer_name")
-    print_file(printable_path, printer_name)
-    await update.message.reply_text(msgs["sent_to_printer"])
-
     try:
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
-        if (
-            printable_path
-            and printable_path != file_path
-            and os.path.exists(printable_path)
-        ):
-            os.remove(printable_path)
-    except Exception:
-        pass
+        print_file(printable_path, printer_name)
+    except PrintingError:
+        await update.message.reply_text(msgs["printing_failed"])
+    else:
+        await update.message.reply_text(msgs["sent_to_printer"])
+    finally:
+        try:
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+            if (
+                printable_path
+                and printable_path != file_path
+                and os.path.exists(printable_path)
+            ):
+                os.remove(printable_path)
+        except Exception:
+            pass
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
