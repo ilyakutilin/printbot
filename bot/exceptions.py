@@ -34,3 +34,7 @@ class UnprintableTypeError(DocumentError):
 
 class PrintingError(DocumentError):
     """Raised in case printing fails."""
+
+
+class PrinterStatusRetrievalError(DocumentError):
+    """Raised in case printer status retrieval fails."""

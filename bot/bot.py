@@ -1,4 +1,5 @@
 import os
+from collections import abc
 
 from telegram import Update
 from telegram.ext import (
@@ -9,24 +10,40 @@ from telegram.ext import (
     filters,
 )
 
-from bot.exceptions import PrintingError, UnprintableTypeError
-from bot.helpers import is_allowed, prepare_for_printing, print_file
+from bot.exceptions import (
+    PrinterStatusRetrievalError,
+    PrintingError,
+    UnprintableTypeError,
+)
+from bot.helpers import get_printing_queue, prepare_for_printing, print_file
 from bot.messages import MESSAGES as msgs
 from bot.settings import Settings
 
 
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def _is_user_valid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     assert update.effective_user is not None
     assert update.message is not None
 
     user_id = update.effective_user.id
     allowed_users = context.bot_data.get("allowed_users")
-    if not is_allowed(user_id, allowed_users):
-        await update.message.reply_text(msgs["no_auth"])
+
+    if not allowed_users or (
+        isinstance(allowed_users, abc.Iterable) and user_id in allowed_users
+    ):
+        return True
+
+    await update.message.reply_text(msgs["no_auth"])
+    return False
+
+
+async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_is_valid = await _is_user_valid(update, context)
+    if not user_is_valid:
         return
 
     file_path = None
     printable_path = None
+    assert update.message is not None
 
     if update.message.document:
         doc = update.message.document
@@ -77,7 +94,19 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
+    user_is_valid = await _is_user_valid(update, context)
+    if not user_is_valid:
+        return
+
+    assert update.message is not None
+    try:
+        queue = get_printing_queue()
+        if queue:
+            await update.message.reply_text(msgs["print_queue"].format(queue=queue))
+        else:
+            await update.message.reply_text(msgs["empty_queue"])
+    except PrinterStatusRetrievalError:
+        await update.message.reply_text(msgs["status_failed"])
 
 
 def build_app(settings: Settings) -> Application:
