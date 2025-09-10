@@ -84,7 +84,9 @@ def build_app(settings: Settings) -> Application:
     app = Application.builder().token(settings.tg_token).build()
 
     app.bot_data["allowed_users"] = settings.allowed_users
-    app.bot_data["printer_name"] = settings.printer_name
+    app.bot_data["printer_name"] = (
+        settings.printer_name if not settings.debug else settings.debug_printer_name
+    )
 
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_file))
     app.add_handler(CommandHandler("status", status))

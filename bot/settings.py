@@ -40,11 +40,17 @@ class LogSettings:
 
 class Settings:
     def __init__(self) -> None:
+        self.debug: bool = self._validate_bool("DEBUG")
+        self.debug_printer_name = os.getenv("DEBUG_PRINTER_NAME", "PDF")
         self.tg_token: str = self._validate_required_str("TELEGRAM_TOKEN")
         self.printer_name: str | None = os.getenv("PRINTER_NAME")
         self.allowed_users: tuple[int, ...] | None = self._validate_tg_users(
             "ALLOWED_USERS"
         )
+
+    def _validate_bool(self, env_var: str) -> bool:
+        val = os.getenv(env_var)
+        return bool(val) and val.lower() in ("1", "t", "true", "y", "yes")
 
     def _validate_required_str(self, env_var: str) -> str:
         """Validates an env var that is required (i.e. there is no default value).
