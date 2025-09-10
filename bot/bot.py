@@ -9,6 +9,7 @@ from telegram.ext import (
     filters,
 )
 
+from bot.exceptions import FileConversionError
 from bot.helpers import convert_to_pdf, is_allowed, print_file
 from bot.messages import MESSAGES as msgs
 from bot.settings import Settings
@@ -27,50 +28,48 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_path = None
     printable_path = None
 
-    try:
-        if update.message.document:
-            doc = update.message.document
-            file = await context.bot.get_file(doc.file_id)
-            file_path = f"/tmp/{doc.file_name}"
-            await file.download_to_drive(file_path)
+    if update.message.document:
+        doc = update.message.document
+        file = await context.bot.get_file(doc.file_id)
+        file_path = f"/tmp/{doc.file_name}"
+        await file.download_to_drive(file_path)
 
-            assert doc.file_name is not None
-            lower_name = doc.file_name.lower()
-            printable_path = file_path
+        assert doc.file_name is not None
+        printable_path = file_path
 
-            if lower_name.endswith((".doc", ".docx", ".xls", ".xlsx")):
-                printable_path = convert_to_pdf(file_path)
-
-        elif update.message.photo:
-            photo = update.message.photo[-1]  # highest resolution
-            file = await context.bot.get_file(photo.file_id)
-            file_path = f"/tmp/photo_{photo.file_id}.jpg"
-            printable_path = file_path
-            await file.download_to_drive(file_path)
-
-        else:
-            await update.message.reply_text(msgs["unsupported"])
-            return
-
-        printer_name = context.bot_data.get("printer_name")
-        print_file(printable_path, printer_name)
-        await update.message.reply_text(msgs["sent_to_printer"])
-
-    # Replace with a custom exception
-    except Exception as e:
-        await update.message.reply_text(msgs["failed"].format(err=e))
-    finally:
         try:
-            if file_path and os.path.exists(file_path):
-                os.remove(file_path)
-            if (
-                printable_path
-                and printable_path != file_path
-                and os.path.exists(printable_path)
-            ):
-                os.remove(printable_path)
-        except Exception:
-            pass
+            printable_path = convert_to_pdf(file_path)
+        except FileConversionError:
+            await update.message.reply_text(msgs["unprintable"])
+        except FileNotFoundError as e:
+            await update.message.reply_text(msgs["failed"].format(err=e))
+
+    elif update.message.photo:
+        photo = update.message.photo[-1]  # highest resolution
+        file = await context.bot.get_file(photo.file_id)
+        file_path = f"/tmp/photo_{photo.file_id}.jpg"
+        printable_path = file_path
+        await file.download_to_drive(file_path)
+
+    else:
+        await update.message.reply_text(msgs["unsupported"])
+        return
+
+    printer_name = context.bot_data.get("printer_name")
+    print_file(printable_path, printer_name)
+    await update.message.reply_text(msgs["sent_to_printer"])
+
+    try:
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        if (
+            printable_path
+            and printable_path != file_path
+            and os.path.exists(printable_path)
+        ):
+            os.remove(printable_path)
+    except Exception:
+        pass
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):

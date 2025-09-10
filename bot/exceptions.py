@@ -14,3 +14,11 @@ class IncorrectUserIDError(SettingsError):
 
     def __init__(self, user_ids: list[str]) -> None:
         super().__init__(f"Incorrect Telegram User ID(s): {', '.join(user_ids)}.")
+
+
+class CommandError(Exception):
+    "Raised in case of errors while executing Linux commands."
+
+
+class FileConversionError(Exception):
+    """Raised if file conversion fails."""
