@@ -20,7 +20,7 @@ class Settings:
     def __init__(self) -> None:
         self.tg_token: str = self._validate_required_str("TELEGRAM_TOKEN")
         self.printer_name: str | None = os.getenv("PRINTER_NAME")
-        self.allowed_users: tuple[str, ...] | None = self._validate_tg_users(
+        self.allowed_users: tuple[int, ...] | None = self._validate_tg_users(
             "ALLOWED_USERS"
         )
 
@@ -76,7 +76,7 @@ class Settings:
             return None
         return parsed
 
-    def _validate_tg_users(self, env_var: str) -> tuple[str, ...] | None:
+    def _validate_tg_users(self, env_var: str) -> tuple[int, ...] | None:
         """Validates Telegram User IDs.
 
         Args:
@@ -92,16 +92,17 @@ class Settings:
         user_ids: tuple[str, ...] | None = self._parse_comma_separated(env_var)
 
         if not user_ids:
-            return user_ids
+            return None
 
         wrong_ids: list[str] = []
+        correct_ids: list[int] = []
         for user_id in user_ids:
             try:
-                int(user_id)
+                correct_ids.append(int(user_id))
             except ValueError:
                 wrong_ids.append(user_id)
 
         if wrong_ids:
             raise IncorrectUserIDError(wrong_ids)
 
-        return user_ids
+        return tuple(correct_ids)
