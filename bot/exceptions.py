@@ -20,5 +20,13 @@ class CommandError(Exception):
     "Raised in case of errors while executing Linux commands."
 
 
-class FileConversionError(Exception):
+class DocumentError(Exception):
+    """Base class for document related errors."""
+
+
+class FileConversionError(DocumentError):
     """Raised if file conversion fails."""
+
+
+class UnprintableTypeError(DocumentError):
+    """Raised if a document of this type cannot be printed."""

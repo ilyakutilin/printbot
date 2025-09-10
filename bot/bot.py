@@ -9,8 +9,8 @@ from telegram.ext import (
     filters,
 )
 
-from bot.exceptions import FileConversionError
-from bot.helpers import convert_to_pdf, is_allowed, print_file
+from bot.exceptions import UnprintableTypeError
+from bot.helpers import is_allowed, prepare_for_printing, print_file
 from bot.messages import MESSAGES as msgs
 from bot.settings import Settings
 
@@ -38,8 +38,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         printable_path = file_path
 
         try:
-            printable_path = convert_to_pdf(file_path)
-        except FileConversionError:
+            printable_path = prepare_for_printing(file_path)
+        except UnprintableTypeError:
             await update.message.reply_text(msgs["unprintable"])
         except FileNotFoundError as e:
             await update.message.reply_text(msgs["failed"].format(err=e))
