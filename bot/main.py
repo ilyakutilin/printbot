@@ -1,5 +1,5 @@
-from bot.bot import build_app
 from bot.exceptions import SettingsError
+from bot.handlers import build_app
 from bot.logger import configure_logging
 from bot.settings import Settings
 
