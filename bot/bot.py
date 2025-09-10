@@ -109,6 +109,15 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msgs["status_failed"])
 
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_is_valid = await _is_user_valid(update, context)
+    if not user_is_valid:
+        return
+
+    assert update.message is not None
+    await update.message.reply_text(msgs["start"])
+
+
 def build_app(settings: Settings) -> Application:
     app = Application.builder().token(settings.tg_token).build()
 
@@ -118,6 +127,7 @@ def build_app(settings: Settings) -> Application:
     )
 
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_file))
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
 
     return app
