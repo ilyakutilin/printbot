@@ -133,4 +133,13 @@ def print_file(file_path: str, printer_name: str | None) -> None:
 
 
 def is_allowed(user_id: int, allowed_users: tuple[int] | None) -> bool:
-    pass
+    """Determines whether a user by the specified ID is among the allowed users.
+
+    Args:
+        user_id (int): Telegram User ID.
+        allowed_users (tuple[int] | None): A tuple of allowed User IDs.
+
+    Returns:
+        bool: True if a user is allowed, False otherwise.
+    """
+    return not allowed_users or user_id in allowed_users
