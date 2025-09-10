@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 
 from bot.helpers import convert_to_pdf, is_allowed, print_file
+from bot.messages import MESSAGES as msgs
 from bot.settings import Settings
 
 
@@ -20,7 +21,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     allowed_users = context.bot_data.get("allowed_users")
     if not is_allowed(user_id, allowed_users):
-        await update.message.reply_text("⛔ You are not authorized to use this bot.")
+        await update.message.reply_text(msgs["no_auth"])
         return
 
     file_path = None
@@ -38,7 +39,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             printable_path = file_path
 
             if lower_name.endswith((".doc", ".docx", ".xls", ".xlsx")):
-                await update.message.reply_text("📄 Converting to PDF...")
                 printable_path = convert_to_pdf(file_path)
 
         elif update.message.photo:
@@ -49,16 +49,16 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await file.download_to_drive(file_path)
 
         else:
-            await update.message.reply_text("Unsupported file type.")
+            await update.message.reply_text(msgs["unsupported"])
             return
 
         printer_name = context.bot_data.get("printer_name")
         print_file(printable_path, printer_name)
-        await update.message.reply_text("✅ File sent to printer.")
+        await update.message.reply_text(msgs["sent_to_printer"])
 
     # Replace with a custom exception
     except Exception as e:
-        await update.message.reply_text(f"❌ Failed to process/print: {e}")
+        await update.message.reply_text(msgs["failed"].format(err=e))
     finally:
         try:
             if file_path and os.path.exists(file_path):
