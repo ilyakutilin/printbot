@@ -127,9 +127,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file = await context.bot.get_file(photo.file_id)
         file_path = f"/tmp/photo_{photo.file_id}.jpg"
         logger.info(f"Downloading the photo to {file_path}")
-        await update.message.reply_text(
-            msgs["downloading_photo"], reply_markup=main_keyboard
-        )
         printable_path = file_path
         await file.download_to_drive(file_path)
         logger.info("Photo has been successfully downloaded")
