@@ -87,7 +87,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = f"/tmp/{doc.file_name}"
         logger.info(f"Downloading {doc.file_name} to {file_path}")
         await update.message.reply_text(
-            msgs["downloading_file"].format(doc.file_name), reply_markup=main_keyboard
+            msgs["downloading_file"].format(filename=doc.file_name),
+            reply_markup=main_keyboard,
         )
         await file.download_to_drive(file_path)
         logger.info(f"File {doc.file_name} has been successfully downloaded")
