@@ -15,8 +15,10 @@ def main():
         logger.error(f"Project settings validation error: {e} {exit_text}")
         raise SystemExit(1)
 
+    logger.info("Building the app.")
     app = build_app(s)
 
+    logger.info("The app has successfully been built, starting polling...")
     app.run_polling()
 
 

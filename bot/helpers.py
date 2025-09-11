@@ -3,6 +3,7 @@ import shutil
 import subprocess
 
 import filetype
+from filetype.types.archive import Pdf
 
 from bot.exceptions import (
     CommandError,
@@ -11,6 +12,9 @@ from bot.exceptions import (
     PrintingError,
     UnprintableTypeError,
 )
+from bot.logger import configure_logging
+
+logger = configure_logging(__name__)
 
 
 def run_cmd(command: list[str]) -> subprocess.CompletedProcess:
@@ -45,9 +49,6 @@ def _convert_to_pdf(input_path: str) -> str:
     Returns:
         str: A path to the converted PDF file.
     """
-    if not os.path.isfile(input_path):
-        raise FileNotFoundError(f"File not found: {input_path}")
-
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
         raise FileConversionError(
@@ -96,18 +97,39 @@ def prepare_for_printing(file_path: str) -> str:
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    if filetype.is_image(file_path):
+    file_name = os.path.basename(file_path)
+    file_type: filetype.Type | None = filetype.guess(file_path)
+    if isinstance(file_type, Pdf) or filetype.is_image(file_path):
+        assert file_type is not None
+        logger.debug(
+            f"File {file_name} is of type ({file_type.mime}), so it can be printed "
+            "as is"
+        )
         return file_path
 
     if filetype.is_document(file_path):
+        assert file_type is not None
+        logger.debug(
+            f"File {file_name} is an office document ({file_type.extension}), "
+            "so it needs to be converted to PDF before printing"
+        )
         try:
-            return _convert_to_pdf(file_path)
+            logger.debug(f"Converting file {file_name} to PDF using LibreOffice")
+            pdf_path = _convert_to_pdf(file_path)
+            logger.debug(
+                f"File {file_name} has successfully been converted to PDF "
+                f"and is accessible by path {pdf_path}"
+            )
         except FileConversionError as e:
+            logger.debug(f"Conversion of the file {file_name} to PDF failed")
             raise UnprintableTypeError(
                 f"File {file_path} could not be converted to PDF: {e}"
             )
 
-    raise UnprintableTypeError(f"File {file_path} cannot be printed: unsupported type")
+    file_type_str = f": {file_type.extension}" if file_type else ""
+    raise UnprintableTypeError(
+        f"File {file_path} cannot be printed: unsupported type{file_type_str}"
+    )
 
 
 def print_file(file_path: str, printer_name: str | None) -> None:
@@ -122,12 +144,22 @@ def print_file(file_path: str, printer_name: str | None) -> None:
     """
     if printer_name:
         cmd = ["lp", "-d", printer_name, file_path]
+        logger.debug(
+            f"Printer name is supplied ({printer_name}), so the printing command "
+            f"looks like this: {' '.join(cmd)}"
+        )
     else:
         cmd = ["lp", file_path]
+        logger.debug(
+            f"Printer name is not supplied, so the printing will be done "
+            f"on the default printer, and the command looks like this: {' '.join(cmd)}"
+        )
 
     try:
+        logger.debug("Executing the printing command")
         run_cmd(cmd)
     except CommandError as e:
+        logger.debug("Printing command failed")
         raise PrintingError(
             f"Failure while running the conversion command {' '.join(cmd)}: {e}"
         )
