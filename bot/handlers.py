@@ -15,7 +15,7 @@ from bot.exceptions import (
     PrintingError,
     UnprintableTypeError,
 )
-from bot.helpers import get_printing_queue, prepare_for_printing, print_file
+from bot.helpers import get_printing_queue, prepare_for_printing, print_file, sizeof_fmt
 from bot.logger import configure_logging
 from bot.messages import MESSAGES as msgs
 from bot.settings import Settings
@@ -79,24 +79,24 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         assert doc.file_name is not None
         logger.info(f"File {doc.file_name} has been sent as an attachment")
         logger.info(
-            # TODO: Get human size
-            f"Getting basic info about the file {doc.file_name}, size {doc.file_size}, "
-            f"MIME type {doc.mime_type} and preparing it for downloading"
+            f"Getting basic info about the file {doc.file_name} with ID {doc.file_id}, "
+            f"size {sizeof_fmt(doc.file_size)}, MIME type {doc.mime_type} "
+            "and preparing it for downloading"
         )
         file = await context.bot.get_file(doc.file_id)
         file_path = f"/tmp/{doc.file_name}"
-        logger.info(
-            f"Downloading the file {doc.file_name} (file ID {file.file_id}) to "
-            f"{file_path}"
+        logger.info(f"Downloading {doc.file_name} to {file_path}")
+        await update.message.reply_text(
+            msgs["downloading_file"].format(doc.file_name), reply_markup=main_keyboard
         )
         await file.download_to_drive(file_path)
-        logger.info(
-            f"File {doc.file_name} with ID {file.file_id} has been successfully "
-            f"downloaded to {file_path}"
-        )
+        logger.info(f"File {doc.file_name} has been successfully downloaded")
 
         try:
             logger.info(f"Preparing file {doc.file_name} for printing")
+            await update.message.reply_text(
+                msgs["preparing_file"], reply_markup=main_keyboard
+            )
             printable_path = prepare_for_printing(file_path)
         except UnprintableTypeError as e:
             logger.error(f"Printing failed: {e}")
@@ -119,20 +119,19 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo = update.message.photo[-1]  # highest resolution
         logger.info("An object sent to be printed is a photo")
         logger.info(
-            # TODO: Get human size
-            f"Getting basic info about the photo, size {photo.file_size}, "
-            f"resolution {photo.width} x {photo.height}, and preparing it "
-            "for downloading"
+            f"Getting basic info about the photo with ID {photo.file_id}, size "
+            f"{sizeof_fmt(photo.file_size)}, resolution {photo.width} x {photo.height},"
+            " and preparing it for downloading"
         )
         file = await context.bot.get_file(photo.file_id)
         file_path = f"/tmp/photo_{photo.file_id}.jpg"
-        logger.info(f"Downloading the photo file (ID {file.file_id}) to {file_path}")
+        logger.info(f"Downloading the photo to {file_path}")
+        await update.message.reply_text(
+            msgs["downloading_photo"], reply_markup=main_keyboard
+        )
         printable_path = file_path
         await file.download_to_drive(file_path)
-        logger.info(
-            f"Photo with ID {file.file_id} has been successfully downloaded to "
-            f"{file_path}"
-        )
+        logger.info("Photo has been successfully downloaded")
 
     else:
         logger.warning(

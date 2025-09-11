@@ -18,6 +18,20 @@ from bot.logger import configure_logging
 logger = configure_logging(__name__)
 
 
+def sizeof_fmt(num: float | None, suffix: str = "B") -> str:
+    if not num:
+        return "0 B"
+
+    for unit in ("", "K", "M", "G", "T", "P", "E", "Z"):
+        if abs(num) < 1024.0:
+            if num.is_integer():
+                return f"{int(num)} {unit}{suffix}"
+            else:
+                return f"{num:.1f} {unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f} Y{suffix}"
+
+
 def run_cmd(command: list[str]) -> subprocess.CompletedProcess:
     """Runs a Linux command and returns the result.
 
@@ -121,6 +135,7 @@ def prepare_for_printing(file_path: str) -> str:
                 f"File {file_name} has successfully been converted to PDF "
                 f"and is accessible by path {pdf_path}"
             )
+            return pdf_path
         except FileConversionError as e:
             logger.debug(f"Conversion of the file {file_name} to PDF failed")
             raise UnprintableTypeError(
