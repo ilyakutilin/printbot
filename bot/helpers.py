@@ -4,6 +4,7 @@ import subprocess
 
 import filetype
 from filetype.types.archive import Pdf
+from filetype.types.image import Bmp, Gif, Ico, Jpeg, Png, Tiff
 
 from bot.exceptions import (
     CommandError,
@@ -99,7 +100,7 @@ def prepare_for_printing(file_path: str) -> str:
 
     file_name = os.path.basename(file_path)
     file_type: filetype.Type | None = filetype.guess(file_path)
-    if isinstance(file_type, Pdf) or filetype.is_image(file_path):
+    if isinstance(file_type, (Pdf, Bmp, Gif, Ico, Jpeg, Png, Tiff)):
         assert file_type is not None
         logger.debug(
             f"File {file_name} is of type ({file_type.mime}), so it can be printed "
