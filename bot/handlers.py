@@ -95,16 +95,15 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"downloaded to {file_path}"
         )
 
-        printable_path = file_path
-
         try:
             logger.info(f"Preparing file {doc.file_name} for printing")
             printable_path = prepare_for_printing(file_path)
         except UnprintableTypeError as e:
-            logger.error(f"File {doc.file_name} could not be printed: {e}")
+            logger.error(f"Printing failed: {e}")
             await update.message.reply_text(
                 msgs["unprintable"], reply_markup=main_keyboard
             )
+            return
         except FileNotFoundError as e:
             logger.error(
                 f"!!! File {doc.file_name} has not been found by path {file_path}: {e}."
@@ -114,6 +113,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 msgs["failed"].format(err=e), reply_markup=main_keyboard
             )
+            return
 
     elif update.message.photo:
         photo = update.message.photo[-1]  # highest resolution
@@ -121,7 +121,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(
             # TODO: Get human size
             f"Getting basic info about the photo, size {photo.file_size}, "
-            f"dimensions {photo.width} x {photo.height}, and preparing it "
+            f"resolution {photo.width} x {photo.height}, and preparing it "
             "for downloading"
         )
         file = await context.bot.get_file(photo.file_id)
@@ -142,45 +142,53 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msgs["unsupported"], reply_markup=main_keyboard)
         return
 
-    file_name = os.path.basename(printable_path)
-    printer_name = context.bot_data.get("printer_name")
-    if printer_name:
-        logger.info(f"File {file_name} will be sent to printer {printer_name}")
-    else:
-        logger.info(f"File {file_name} will be sent to the default printer")
+    if printable_path:
+        file_name = os.path.basename(printable_path)
+        printer_name = context.bot_data.get("printer_name")
+        if printer_name:
+            logger.info(f"File {file_name} will be sent to printer {printer_name}")
+        else:
+            logger.info(f"File {file_name} will be sent to the default printer")
 
-    try:
-        logger.info(f"Attempting to print file {file_name}")
-        print_file(printable_path, printer_name)
-    except PrintingError as e:
-        logger.error(f"Printing file {file_name} failed: {e}")
-        await update.message.reply_text(
-            msgs["printing_failed"], reply_markup=main_keyboard
-        )
-    else:
-        logger.info(
-            f"File {file_name} has successfully been sent to printer, "
-            "and the printer did not report any errors"
-        )
-        await update.message.reply_text(
-            msgs["sent_to_printer"], reply_markup=main_keyboard
-        )
-    finally:
-        logger.info("Cleaning up")
         try:
-            if file_path and os.path.exists(file_path):
-                logger.debug(f"Removing {file_path}")
-                os.remove(file_path)
-            if (
-                printable_path
-                and printable_path != file_path
-                and os.path.exists(printable_path)
-            ):
-                logger.debug(f"Removing {printable_path}")
-                os.remove(printable_path)
-        except Exception as e:
-            logger.warning(f"Cleaning up failed: {e}")
-            pass
+            logger.info(f"Attempting to print file {file_name}")
+            print_file(printable_path, printer_name)
+        except PrintingError as e:
+            logger.error(f"Printing file {file_name} failed: {e}")
+            await update.message.reply_text(
+                msgs["printing_failed"], reply_markup=main_keyboard
+            )
+        else:
+            logger.info(
+                f"File {file_name} has successfully been sent to printer, "
+                "and the printer did not report any errors"
+            )
+            await update.message.reply_text(
+                msgs["sent_to_printer"], reply_markup=main_keyboard
+            )
+
+    logger.info("Cleaning up")
+    try:
+        removed = False
+        if file_path and os.path.exists(file_path):
+            logger.debug(f"Removing {file_path}")
+            os.remove(file_path)
+            removed = True
+        if (
+            printable_path
+            and printable_path != file_path
+            and os.path.exists(printable_path)
+        ):
+            logger.debug(f"Removing {printable_path}")
+            os.remove(printable_path)
+            removed = True
+        if not removed:
+            logger.debug("Nothing to remove / clean up")
+    except Exception as e:
+        logger.warning(f"Cleaning up failed: {e}")
+        pass
+    else:
+        logger.info("Cleaning up completed")
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):

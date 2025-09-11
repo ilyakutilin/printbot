@@ -129,7 +129,7 @@ def prepare_for_printing(file_path: str) -> str:
 
     file_type_str = f": {file_type.extension}" if file_type else ""
     raise UnprintableTypeError(
-        f"File {file_path} cannot be printed: unsupported type{file_type_str}"
+        f"File {file_path} is of an unsupported type{file_type_str}"
     )
 
 
