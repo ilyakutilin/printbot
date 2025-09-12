@@ -98,7 +98,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 msgs["preparing_file"], reply_markup=main_keyboard
             )
-            printable_path = prepare_for_printing(file_path)
+            printable_path, page_count = prepare_for_printing(file_path)
         except UnprintableTypeError as e:
             logger.error(f"Printing failed: {e}")
             await update.message.reply_text(
@@ -128,6 +128,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = f"/tmp/photo_{photo.file_id}.jpg"
         logger.info(f"Downloading the photo to {file_path}")
         printable_path = file_path
+        page_count = 1
         await file.download_to_drive(file_path)
         logger.info("Photo has been successfully downloaded")
 
@@ -146,6 +147,18 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"File {file_name} will be sent to printer {printer_name}")
         else:
             logger.info(f"File {file_name} will be sent to the default printer")
+
+        # TODO: Make the max amount of pages a setting instead of hard coding
+        if page_count >= 20:
+            logger.debug(
+                "There are more than 20 pages in the document to be printed, "
+                "send a confirmation message to the user"
+            )
+            # TODO: Add the actual inline buttons for Yes and No, and the callback
+            await update.message.reply_text(
+                msgs["page_count_warning"].format(filename=file_name, pages=page_count),
+                reply_markup=main_keyboard,
+            )
 
         try:
             logger.info(f"Attempting to print file {file_name}")

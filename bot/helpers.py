@@ -127,7 +127,7 @@ def _convert_to_pdf(input_path: str) -> str:
     return pdf_path
 
 
-def prepare_for_printing(file_path: str) -> str:
+def prepare_for_printing(file_path: str) -> tuple[str, int]:
     """Prepares the file for printing.
 
     Args:
@@ -138,7 +138,8 @@ def prepare_for_printing(file_path: str) -> str:
         UnprintableTypeError: Raised if the file of an unsupported type.
 
     Returns:
-        str: A path to the file ready for printing.
+        A tuple containing the path to the printable file
+            and the amount of pages in that file.
     """
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -151,9 +152,9 @@ def prepare_for_printing(file_path: str) -> str:
             f"File {file_name} is of type ({file_type.mime}), so it can be printed "
             "as is"
         )
-        return file_path
+        final_path = file_path
 
-    if filetype.is_document(file_path):
+    elif filetype.is_document(file_path):
         assert file_type is not None
         logger.debug(
             f"File {file_name} is an office document ({file_type.extension}), "
@@ -166,17 +167,24 @@ def prepare_for_printing(file_path: str) -> str:
                 f"File {file_name} has successfully been converted to PDF "
                 f"and is accessible by path {pdf_path}"
             )
-            return pdf_path
+            final_path = pdf_path
         except FileConversionError as e:
             logger.debug(f"Conversion of the file {file_name} to PDF failed")
             raise UnprintableTypeError(
                 f"File {file_path} could not be converted to PDF: {e}"
             )
 
-    file_type_str = f": {file_type.extension}" if file_type else ""
-    raise UnprintableTypeError(
-        f"File {file_path} is of an unsupported type{file_type_str}"
-    )
+    else:
+        file_type_str = f": {file_type.extension}" if file_type else ""
+        raise UnprintableTypeError(
+            f"File {file_path} is of an unsupported type{file_type_str}"
+        )
+
+    page_count: int | None = count_pdf_pages(final_path)
+    if page_count is None:
+        page_count = 1
+
+    return final_path, page_count
 
 
 def print_file(file_path: str, printer_name: str | None) -> None:
