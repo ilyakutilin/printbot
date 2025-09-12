@@ -18,7 +18,7 @@ from bot.exceptions import (
 from bot.helpers import get_printing_queue, prepare_for_printing, print_file, sizeof_fmt
 from bot.logger import configure_logging
 from bot.messages import MESSAGES as msgs
-from bot.settings import Settings
+from bot.settings import PrintContext, Settings
 
 logger = configure_logging(__name__)
 
@@ -34,6 +34,9 @@ class PrintJob:
         self.main_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
             [["/start", "/status"]], resize_keyboard=True, one_time_keyboard=False
         )
+        pc = self.context.bot_data.get("print_context")
+        assert isinstance(pc, PrintContext)
+        self.print_context: PrintContext = pc
 
     async def is_user_valid(self) -> bool:
         assert self.update.effective_user is not None
@@ -41,7 +44,7 @@ class PrintJob:
 
         user = self.update.effective_user
         user_id = user.id
-        allowed_users = self.context.bot_data.get("allowed_users")
+        allowed_users = self.print_context.allowed_users
 
         if not allowed_users:
             logger.info(
@@ -125,10 +128,9 @@ class PrintJob:
 
     async def request_print_confirmation(self) -> None:
         assert self.update.message is not None
-        # TODO: Make the max amount of pages a setting instead of hard coding
         logger.debug(
-            "There are more than 20 pages in the document to be printed, "
-            "send a confirmation message to the user"
+            f"There are more than {self.print_context.page_confirm_limit} pages "
+            "in the document to be printed, send a confirmation message to the user"
         )
         # TODO: Add the actual inline buttons for Yes and No, and the callback
         await self.update.message.reply_text(
@@ -158,7 +160,7 @@ class PrintJob:
 
     async def send_to_printer(self) -> None:
         assert self.update.message is not None
-        printer_name = self.context.bot_data.get("printer_name")
+        printer_name = self.print_context.printer_name
         if printer_name:
             logger.info(f"File {self.file_name} will be sent to printer {printer_name}")
         else:
@@ -166,6 +168,7 @@ class PrintJob:
 
         try:
             logger.info(f"Attempting to print file {self.file_name}")
+            # TODO: This assertion fails
             assert self.printable_path is not None
             print_file(self.printable_path, printer_name)
         except PrintingError as e:
@@ -247,11 +250,11 @@ async def handle_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await job.process_doc()
-    # TODO: Make the max amount of pages a setting instead of hard coding
-    if job.page_count and job.page_count >= 20:
+    if job.page_count and job.page_count >= job.print_context.page_confirm_limit:
         await job.request_print_confirmation()
         return
-    await job.send_to_printer()
+    if job.printable_path:
+        await job.send_to_printer()
     await job.cleanup()
 
 
@@ -287,19 +290,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def build_app(settings: Settings) -> Application:
     app = Application.builder().token(settings.tg_token).build()
 
-    app.bot_data["allowed_users"] = settings.allowed_users
+    app.bot_data["print_context"] = settings.print_context
     logger.info(
-        "Info on the allowed users has been added to bot_data and is now available "
-        "to handlers via context with key 'allowed_users': "
-        f"{app.bot_data['allowed_users']}"
-    )
-    app.bot_data["printer_name"] = (
-        settings.printer_name if not settings.debug else settings.debug_printer_name
-    )
-    logger.info(
-        "Printer name has been added to bot_data and is now available "
-        "to handlers via context with key 'printer_name': "
-        f"{app.bot_data['printer_name']}"
+        "Print Context (info on the allowed users, Printer name, and the amount of "
+        "pages in a document that triggers additional print confirmation) has been "
+        "added to bot_data and is now available to handlers via context with key "
+        f"'print_context': {app.bot_data['print_context']}"
     )
 
     app.add_handler(MessageHandler(filters.Document.ALL, handle_doc))

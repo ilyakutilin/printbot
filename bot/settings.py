@@ -38,36 +38,24 @@ class LogSettings:
             return logging.INFO
 
 
-class Settings:
-    def __init__(self) -> None:
-        self.debug: bool = self._validate_bool("DEBUG")
-        self.debug_printer_name = os.getenv("DEBUG_PRINTER_NAME", "PDF")
-        self.tg_token: str = self._validate_required_str("TELEGRAM_TOKEN")
-        self.printer_name: str | None = os.getenv("PRINTER_NAME")
+class PrintContext:
+    def __init__(self, printer_name: str | None) -> None:
+        self.printer_name: str | None = printer_name
         self.allowed_users: tuple[int, ...] | None = self._validate_tg_users(
             "ALLOWED_USERS"
         )
+        self.page_confirm_limit: int = self._validate_int("PAGE_CONFIRM_LIMIT", 20)
 
-    def _validate_bool(self, env_var: str) -> bool:
+    def _validate_int(self, env_var: str, default: int) -> int:
         val = os.getenv(env_var)
-        return bool(val) and val.lower() in ("1", "t", "true", "y", "yes")
 
-    def _validate_required_str(self, env_var: str) -> str:
-        """Validates an env var that is required (i.e. there is no default value).
-
-        Args:
-            env_var (str): A required environmant variable.
-
-        Raises:
-            MissingEnvVarError: Raised if a required env var is missing.
-
-        Returns:
-            str: A value of the env var.
-        """
-        val = os.getenv(env_var)
         if not val:
-            raise MissingEnvVarError(env_var)
-        return val
+            return default
+
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            return default
 
     def _parse_comma_separated(self, env_var: str) -> tuple[str, ...] | None:
         """Splits a comma separated string into a tuple of strings.
@@ -134,3 +122,41 @@ class Settings:
             raise IncorrectUserIDError(wrong_ids)
 
         return tuple(correct_ids)
+
+    def __repr__(self) -> str:
+        return (
+            f"<PrintContext: allowed_users={self.allowed_users}, "
+            f"printer_name={self.printer_name}, "
+            f"page_confirm_limit={self.page_confirm_limit}>"
+        )
+
+
+class Settings:
+    def __init__(self) -> None:
+        self.debug: bool = self._validate_bool("DEBUG")
+        self.debug_printer_name = os.getenv("DEBUG_PRINTER_NAME", "PDF")
+        self.tg_token: str = self._validate_required_str("TELEGRAM_TOKEN")
+        self.print_context: PrintContext = PrintContext(
+            os.getenv("PRINTER_NAME") if not self.debug else self.debug_printer_name
+        )
+
+    def _validate_bool(self, env_var: str) -> bool:
+        val = os.getenv(env_var)
+        return bool(val) and val.lower() in ("1", "t", "true", "y", "yes")
+
+    def _validate_required_str(self, env_var: str) -> str:
+        """Validates an env var that is required (i.e. there is no default value).
+
+        Args:
+            env_var (str): A required environmant variable.
+
+        Raises:
+            MissingEnvVarError: Raised if a required env var is missing.
+
+        Returns:
+            str: A value of the env var.
+        """
+        val = os.getenv(env_var)
+        if not val:
+            raise MissingEnvVarError(env_var)
+        return val
