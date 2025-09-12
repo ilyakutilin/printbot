@@ -22,222 +22,266 @@ from bot.settings import Settings
 
 logger = configure_logging(__name__)
 
-main_keyboard = ReplyKeyboardMarkup(
-    [["/start", "/status"]], resize_keyboard=True, one_time_keyboard=False
-)
 
+class PrintJob:
+    def __init__(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        self.update = update
+        self.context = context
+        self.input_path: str | None = None
+        self.printable_path: str | None = None
+        self.file_name: str | None = None
+        self.page_count: int | None = None
+        self.main_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
+            [["/start", "/status"]], resize_keyboard=True, one_time_keyboard=False
+        )
 
-async def _is_user_valid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    assert update.effective_user is not None
-    assert update.message is not None
+    async def is_user_valid(self) -> bool:
+        assert self.update.effective_user is not None
+        assert self.update.message is not None
 
-    user = update.effective_user
-    user_id = user.id
-    allowed_users = context.bot_data.get("allowed_users")
+        user = self.update.effective_user
+        user_id = user.id
+        allowed_users = self.context.bot_data.get("allowed_users")
 
-    if not allowed_users:
+        if not allowed_users:
+            logger.info(
+                "There is no restriction on the users, so anyone can access "
+                f"the service. Current user: {user.username} ({user.full_name}, "
+                f"ID {user_id})"
+            )
+            return True
+
+        if not isinstance(allowed_users, abc.Iterable):
+            logger.error(
+                f"Allowed users is not an iterable, it's {type(allowed_users)}: "
+                f"{str(allowed_users)}. There is something wrong with the design "
+                f"of the app. The current user: {user.username} ({user.full_name}, "
+                f"ID {user_id}) will be denied access for security reasons."
+            )
+            await self.update.message.reply_text(msgs["no_auth"])
+            return False
+
+        if user_id not in allowed_users:
+            logger.warning(
+                f"Attempt to access the bot by an unathorized user: ID: {user.id}, "
+                f"Name: {user.full_name}, Username: {user.username}"
+            )
+            await self.update.message.reply_text(msgs["no_auth"])
+            return False
+
         logger.info(
-            f"There is no restriction on the users, so anyone can access the service. "
-            f"Current user: {user.username} ({user.full_name}, ID {user_id})"
+            f"User {user.username} ({user.full_name}, ID {user.id}) is authorized"
         )
         return True
 
-    if not isinstance(allowed_users, abc.Iterable):
-        logger.error(
-            f"Allowed users is not an iterable, it's {type(allowed_users)}: "
-            f"{str(allowed_users)}. There is something wrong with the design "
-            f"of the app. The current user: {user.username} ({user.full_name}, "
-            f"ID {user_id}) will be denied access for security reasons."
-        )
-        await update.message.reply_text(msgs["no_auth"])
-        return False
-
-    if user_id not in allowed_users:
-        logger.warning(
-            f"Attempt to access the bot by an unathorized user: ID: {user.id}, Name: "
-            f"{user.full_name}, Username: {user.username}"
-        )
-        await update.message.reply_text(msgs["no_auth"])
-        return False
-
-    logger.info(f"User {user.username} ({user.full_name}, ID {user.id}) is authorized")
-    return True
-
-
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Event: object sent for printing")
-    user_is_valid = await _is_user_valid(update, context)
-    if not user_is_valid:
-        return
-
-    file_path = None
-    printable_path = None
-    assert update.message is not None
-
-    if update.message.document:
-        doc = update.message.document
+    async def process_doc(self) -> None:
+        assert self.update.message is not None
+        doc = self.update.message.document
+        assert doc is not None
         assert doc.file_name is not None
-        logger.info(f"File {doc.file_name} has been sent as an attachment")
+        self.file_name = doc.file_name
+
         logger.info(
-            f"Getting basic info about the file {doc.file_name} with ID {doc.file_id}, "
-            f"size {sizeof_fmt(doc.file_size)}, MIME type {doc.mime_type} "
+            f"Event: File {self.file_name} has been sent for printing as an attachment"
+        )
+        logger.info(
+            f"Getting basic info about the file {self.file_name} with ID {doc.file_id},"
+            f" size {sizeof_fmt(doc.file_size)}, MIME type {doc.mime_type} "
             "and preparing it for downloading"
         )
-        file = await context.bot.get_file(doc.file_id)
-        file_path = f"/tmp/{doc.file_name}"
-        logger.info(f"Downloading {doc.file_name} to {file_path}")
-        await update.message.reply_text(
-            msgs["downloading_file"].format(filename=doc.file_name),
-            reply_markup=main_keyboard,
+        file = await self.context.bot.get_file(doc.file_id)
+        self.input_path = f"/tmp/{self.file_name}"
+        logger.info(f"Downloading {self.file_name} to {self.input_path}")
+        await self.update.message.reply_text(
+            msgs["downloading_file"].format(filename=self.file_name),
+            reply_markup=self.main_keyboard,
         )
-        await file.download_to_drive(file_path)
-        logger.info(f"File {doc.file_name} has been successfully downloaded")
+        await file.download_to_drive(self.input_path)
+        logger.info(f"File {self.file_name} has been successfully downloaded")
 
         try:
-            logger.info(f"Preparing file {doc.file_name} for printing")
-            await update.message.reply_text(
-                msgs["preparing_file"], reply_markup=main_keyboard
+            logger.info(f"Preparing file {self.file_name} for printing")
+            await self.update.message.reply_text(
+                msgs["preparing_file"], reply_markup=self.main_keyboard
             )
-            printable_path, page_count = prepare_for_printing(file_path)
+            self.printable_path, self.page_count = prepare_for_printing(self.input_path)
+
         except UnprintableTypeError as e:
             logger.error(f"Printing failed: {e}")
-            await update.message.reply_text(
-                msgs["unprintable"], reply_markup=main_keyboard
+            await self.update.message.reply_text(
+                msgs["unprintable"], reply_markup=self.main_keyboard
             )
             return
         except FileNotFoundError as e:
             logger.error(
-                f"!!! File {doc.file_name} has not been found by path {file_path}: {e}."
-                " This should not have happened and it indicates that there is "
-                "something wrong with the app design !!!"
+                f"!!! File {self.file_name} has not been found by path "
+                f"{self.input_path}: {e}. This should not have happened and "
+                "it indicates that there is something wrong with the app design !!!"
             )
-            await update.message.reply_text(
-                msgs["failed"].format(err=e), reply_markup=main_keyboard
+            await self.update.message.reply_text(
+                msgs["failed"].format(err=e), reply_markup=self.main_keyboard
             )
             return
 
-    elif update.message.photo:
-        photo = update.message.photo[-1]  # highest resolution
-        logger.info("An object sent to be printed is a photo")
+    async def request_print_confirmation(self) -> None:
+        assert self.update.message is not None
+        # TODO: Make the max amount of pages a setting instead of hard coding
+        logger.debug(
+            "There are more than 20 pages in the document to be printed, "
+            "send a confirmation message to the user"
+        )
+        # TODO: Add the actual inline buttons for Yes and No, and the callback
+        await self.update.message.reply_text(
+            msgs["page_count_warning"].format(
+                filename=self.file_name, pages=self.page_count
+            ),
+            reply_markup=self.main_keyboard,
+        )
+
+    async def process_photo(self) -> None:
+        assert self.update.message is not None
+        photo = self.update.message.photo[-1]  # highest resolution
+        logger.info("Event: A photo has been sent for printing")
         logger.info(
             f"Getting basic info about the photo with ID {photo.file_id}, size "
             f"{sizeof_fmt(photo.file_size)}, resolution {photo.width} x {photo.height},"
             " and preparing it for downloading"
         )
-        file = await context.bot.get_file(photo.file_id)
-        file_path = f"/tmp/photo_{photo.file_id}.jpg"
-        logger.info(f"Downloading the photo to {file_path}")
-        printable_path = file_path
-        page_count = 1
-        await file.download_to_drive(file_path)
+        file = await self.context.bot.get_file(photo.file_id)
+        self.file_name = f"{photo.file_id}.jpg"
+        self.input_path = f"/tmp/photo_{self.file_name}"
+        logger.info(f"Downloading the photo to {self.input_path}")
+        self.printable_path = self.input_path
+        self.page_count = 1
+        await file.download_to_drive(self.input_path)
         logger.info("Photo has been successfully downloaded")
 
-    else:
-        logger.warning(
-            "An object sent to be printed is a not a photo and not a document, "
-            "so it's unsupported."
-        )
-        await update.message.reply_text(msgs["unsupported"], reply_markup=main_keyboard)
-        return
-
-    if printable_path:
-        file_name = os.path.basename(printable_path)
-        printer_name = context.bot_data.get("printer_name")
+    async def send_to_printer(self) -> None:
+        assert self.update.message is not None
+        printer_name = self.context.bot_data.get("printer_name")
         if printer_name:
-            logger.info(f"File {file_name} will be sent to printer {printer_name}")
+            logger.info(f"File {self.file_name} will be sent to printer {printer_name}")
         else:
-            logger.info(f"File {file_name} will be sent to the default printer")
-
-        # TODO: Make the max amount of pages a setting instead of hard coding
-        if page_count >= 20:
-            logger.debug(
-                "There are more than 20 pages in the document to be printed, "
-                "send a confirmation message to the user"
-            )
-            # TODO: Add the actual inline buttons for Yes and No, and the callback
-            await update.message.reply_text(
-                msgs["page_count_warning"].format(filename=file_name, pages=page_count),
-                reply_markup=main_keyboard,
-            )
+            logger.info(f"File {self.file_name} will be sent to the default printer")
 
         try:
-            logger.info(f"Attempting to print file {file_name}")
-            print_file(printable_path, printer_name)
+            logger.info(f"Attempting to print file {self.file_name}")
+            assert self.printable_path is not None
+            print_file(self.printable_path, printer_name)
         except PrintingError as e:
-            logger.error(f"Printing file {file_name} failed: {e}")
-            await update.message.reply_text(
-                msgs["printing_failed"], reply_markup=main_keyboard
+            logger.error(f"Printing file {self.file_name} failed: {e}")
+            await self.update.message.reply_text(
+                msgs["printing_failed"], reply_markup=self.main_keyboard
             )
         else:
             logger.info(
-                f"File {file_name} has successfully been sent to printer, "
+                f"File {self.file_name} has successfully been sent to printer, "
                 "and the printer did not report any errors"
             )
-            await update.message.reply_text(
-                msgs["sent_to_printer"], reply_markup=main_keyboard
+            await self.update.message.reply_text(
+                msgs["sent_to_printer"], reply_markup=self.main_keyboard
             )
 
-    logger.info("Cleaning up")
-    try:
-        removed = False
-        if file_path and os.path.exists(file_path):
-            logger.debug(f"Removing {file_path}")
-            os.remove(file_path)
-            removed = True
-        if (
-            printable_path
-            and printable_path != file_path
-            and os.path.exists(printable_path)
-        ):
-            logger.debug(f"Removing {printable_path}")
-            os.remove(printable_path)
-            removed = True
-        if not removed:
-            logger.debug("Nothing to remove / clean up")
-    except Exception as e:
-        logger.warning(f"Cleaning up failed: {e}")
-        pass
-    else:
-        logger.info("Cleaning up completed")
+    async def cleanup(self) -> None:
+        logger.info("Cleaning up")
+        try:
+            removed = False
+            if self.input_path and os.path.exists(self.input_path):
+                logger.debug(f"Removing {self.input_path}")
+                os.remove(self.input_path)
+                removed = True
+            if (
+                self.printable_path
+                and self.printable_path != self.input_path
+                and os.path.exists(self.printable_path)
+            ):
+                logger.debug(f"Removing {self.printable_path}")
+                os.remove(self.printable_path)
+                removed = True
+            if not removed:
+                logger.debug("Nothing to remove / clean up")
+        except Exception as e:
+            logger.warning(f"Cleaning up failed: {e}")
+            pass
+        else:
+            logger.info("Cleaning up completed")
+
+    async def start(self) -> None:
+        logger.info("Event: /start command issued")
+
+        assert self.update.message is not None
+        await self.update.message.reply_text(
+            msgs["start"], reply_markup=self.main_keyboard
+        )
+        logger.info("A start message has been sent to the user")
+
+    async def get_status(self) -> None:
+        logger.info("Event: /status command issued")
+        assert self.update.message is not None
+        try:
+            logger.info("Getting the printing queue")
+            queue = get_printing_queue()
+            if queue:
+                logger.info("Queue received, message sent to user")
+                logger.debug(f"Queue: {queue}")
+                await self.update.message.reply_text(
+                    msgs["print_queue"].format(queue=queue),
+                    reply_markup=self.main_keyboard,
+                )
+            else:
+                logger.info("Queue received and is empty, message sent to user")
+                await self.update.message.reply_text(
+                    msgs["empty_queue"], reply_markup=self.main_keyboard
+                )
+        except PrinterStatusRetrievalError as e:
+            logger.error(f"Error getting the printer queue: {e}")
+            await self.update.message.reply_text(
+                msgs["status_failed"], reply_markup=self.main_keyboard
+            )
+
+
+async def handle_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    job = PrintJob(update, context)
+
+    if not await job.is_user_valid():
+        return
+
+    await job.process_doc()
+    # TODO: Make the max amount of pages a setting instead of hard coding
+    if job.page_count and job.page_count >= 20:
+        await job.request_print_confirmation()
+        return
+    await job.send_to_printer()
+    await job.cleanup()
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    job = PrintJob(update, context)
+
+    if not await job.is_user_valid():
+        return
+
+    await job.process_photo()
+    await job.send_to_printer()
+    await job.cleanup()
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Event: /status command issued")
-    user_is_valid = await _is_user_valid(update, context)
-    if not user_is_valid:
+    job = PrintJob(update, context)
+
+    if not await job.is_user_valid():
         return
 
-    assert update.message is not None
-    try:
-        logger.info("Getting the printing queue")
-        queue = get_printing_queue()
-        if queue:
-            logger.info("Queue received, message sent to user")
-            logger.debug(f"Queue: {queue}")
-            await update.message.reply_text(
-                msgs["print_queue"].format(queue=queue), reply_markup=main_keyboard
-            )
-        else:
-            logger.info("Queue received and is empty, message sent to user")
-            await update.message.reply_text(
-                msgs["empty_queue"], reply_markup=main_keyboard
-            )
-    except PrinterStatusRetrievalError as e:
-        logger.error(f"Error getting the printer queue: {e}")
-        await update.message.reply_text(
-            msgs["status_failed"], reply_markup=main_keyboard
-        )
+    await job.get_status()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Event: /start command issued")
-    user_is_valid = await _is_user_valid(update, context)
-    if not user_is_valid:
+    job = PrintJob(update, context)
+
+    if not await job.is_user_valid():
         return
 
-    assert update.message is not None
-    await update.message.reply_text(msgs["start"], reply_markup=main_keyboard)
-    logger.info("A start message has been sent to the user")
+    await job.start()
 
 
 def build_app(settings: Settings) -> Application:
@@ -258,7 +302,8 @@ def build_app(settings: Settings) -> Application:
         f"{app.bot_data['printer_name']}"
     )
 
-    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_file))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_doc))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
 
