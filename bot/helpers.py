@@ -5,6 +5,8 @@ import subprocess
 import filetype
 from filetype.types.archive import Pdf
 from filetype.types.image import Bmp, Gif, Ico, Jpeg, Png, Tiff
+from PyPDF2 import PdfReader
+from PyPDF2.errors import PyPdfError
 
 from bot.exceptions import (
     CommandError,
@@ -30,6 +32,35 @@ def sizeof_fmt(num: float | None, suffix: str = "B") -> str:
                 return f"{num:.1f} {unit}{suffix}"
         num /= 1024.0
     return f"{num:.1f} Y{suffix}"
+
+
+def count_pdf_pages(pdf_path: str) -> int | None:
+    """Counts the pages in a PDF file.
+
+    Args:
+        pdf_path (str): A path to the PDF file.
+
+    Returns:
+        page_count (int | None): The amount of pages in the PDF file or None
+            if the count could not be processed.
+    """
+    file_name = os.path.basename(pdf_path)
+    logger.debug(f"Counting the pages of a PDF file {file_name}")
+    try:
+        reader = PdfReader(pdf_path)
+        page_count = len(reader.pages)
+        logger.debug(f"There are {page_count} pages in {file_name}")
+        return len(reader.pages)
+    except PyPdfError as e:
+        logger.warning(f"Page count of {file_name} failed: {e}")
+        return None
+    except FileNotFoundError:
+        logger.error(
+            f"File {file_name} was not found at {os.path.dirname(pdf_path)}. "
+            "This is a severe episode and should not happen: there is a design flaw "
+            "in the code."
+        )
+        return None
 
 
 def run_cmd(command: list[str]) -> subprocess.CompletedProcess:
